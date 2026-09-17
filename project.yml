@@ -1,2 +1,2 @@
 publish:
-  kaggle_model: true
+  kaggle_model:"true"
