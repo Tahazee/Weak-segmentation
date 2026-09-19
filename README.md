@@ -1,4 +1,4 @@
-# strongly Supervised Road Segmentation with U-Net
+# Weakly Supervised Road Segmentation with U-Net
 
 A computer vision project exploring **weakly supervised semantic segmentation** for road scenes using a **U-Net architecture with a ResNet34 encoder**.
 
@@ -46,7 +46,7 @@ The visual comparisons show the predicted segmentation masks produced by the dif
 
 ## Model Architecture
 
-The project uses a **U-Net encoder-decoder architecture** with a **ResNet34 backbone**.
+The project uses a **T-Net encoder-decoder architecture** with a **ResNet34 backbone**.
 
 The encoder extracts hierarchical visual features from the input image, while the decoder progressively reconstructs a pixel-level segmentation map.
 
