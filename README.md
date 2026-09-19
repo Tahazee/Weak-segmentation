@@ -1,4 +1,4 @@
-# Weakly Supervised Road Segmentation with U-Net
+# strongly Supervised Road Segmentation with U-Net
 
 A computer vision project exploring **weakly supervised semantic segmentation** for road scenes using a **U-Net architecture with a ResNet34 encoder**.
 
