@@ -1,178 +1,158 @@
-# U-Net Image Segmentation
+# Weakly Supervised Road Segmentation with U-Net
 
-A U-Net based image segmentation model built with PyTorch for pixel-level image segmentation.
+A computer vision project exploring **weakly supervised semantic segmentation** for road scenes using a **U-Net architecture with a ResNet34 encoder**.
 
-> **Status:** Experimental
-> **Model quality:** Baseline / weak model
+The project investigates how effectively a segmentation model can learn road-region representations from limited/weak supervision and evaluates the resulting segmentation quality across different training checkpoints.
+
+---
 
 ## Overview
 
-This project implements a U-Net architecture for image segmentation.
+The model takes an input road image and predicts a pixel-level segmentation mask identifying the target road region.
 
-The model takes an input image and predicts a segmentation mask, assigning each pixel to the target segmentation class.
+### Key Components
 
-The project was created as an experimental computer vision project to understand the practical workflow of training and evaluating a segmentation model.
+* **Architecture:** U-Net
+* **Encoder:** ResNet34
+* **Framework:** PyTorch
+* **Task:** Semantic image segmentation
+* **Application:** Road scene segmentation
+* **Training:** Weakly supervised segmentation
+* **Model checkpoints:** 5-point, 10-point and 50-point variants
 
-## Architecture
+---
 
-The model follows the standard U-Net encoder-decoder architecture.
+## Results
+
+### Road Segmentation — 5 Point Checkpoint
+
+![Road Segmentation Results - 5 Points](assests/road_segmentation_comparison5pts.png)
+
+### Road Segmentation — 10 Point Checkpoint
+
+![Road Segmentation Results - 10 Points](assests/road_segmentation_comparison10pts.png)
+
+### Road Segmentation — 50 Point Checkpoint
+
+![Road Segmentation Results - 50 Points](assests/road_segmentation_comparison50pts.png)
+
+### Checkpoint IoU Comparison
+
+![Checkpoint IoU Comparison](assests/checkpoint_ious.png)
+
+The visual comparisons show the predicted segmentation masks produced by the different checkpoints, while the IoU plot provides a quantitative comparison of segmentation performance.
+
+---
+
+## Model Architecture
+
+The project uses a **U-Net encoder-decoder architecture** with a **ResNet34 backbone**.
+
+The encoder extracts hierarchical visual features from the input image, while the decoder progressively reconstructs a pixel-level segmentation map.
 
 ```text
 Input Image
      │
      ▼
-Encoder
+ResNet34 Encoder
      │
      ├── Feature Extraction
-     ├── Downsampling
-     └── Increasing Feature Depth
      │
      ▼
-Bottleneck
-     │
-     ▼
-Decoder
+U-Net Decoder
      │
      ├── Upsampling
      ├── Skip Connections
-     └── Feature Reconstruction
-     │
-     ▼
-Segmentation Head
      │
      ▼
 Segmentation Mask
 ```
 
-U-Net uses skip connections between the encoder and decoder to preserve spatial information that can be lost during downsampling.
+---
 
-## Model
+## Model Checkpoints
 
-**Architecture:** U-Net
-
-**Task:** Image segmentation
-
-**Framework:** PyTorch
-
-**Input:** RGB image
-
-**Output:** Pixel-level segmentation mask
-
-The released model artifact contains the trained model weights.
-
-## Dataset
-
-The model was trained using an image segmentation dataset containing input images and corresponding segmentation masks.
-
-The dataset details can be expanded as the project develops.
-
-Relevant information includes:
-
-* Dataset name
-* Number of images
-* Image resolution
-* Number of segmentation classes
-* Training/validation split
-* Mask format
-
-## Training
-
-The training pipeline consists of:
-
-1. Loading input images and segmentation masks.
-2. Preprocessing and resizing the images.
-3. Feeding images through the U-Net encoder.
-4. Processing features through the bottleneck.
-5. Reconstructing spatial features through the decoder.
-6. Producing the final segmentation mask.
-7. Comparing predictions with the ground-truth masks.
-8. Updating the model using backpropagation.
-
-The current implementation is intended as a baseline rather than a highly optimized segmentation system.
-
-## Results
-
-The current model produces segmentation predictions but should be considered a **weak baseline**.
-
-It has not been extensively optimized or compared against more advanced segmentation architectures.
-
-When available, the following metrics can be reported:
-
-| Metric         | Score |
-| -------------- | ----: |
-| IoU            |     — |
-| Dice Score     |     — |
-| Pixel Accuracy |     — |
-
-These values should be updated with the actual evaluation results from the released model.
-
-## Usage
-
-A typical inference workflow is:
-
-```python
-import torch
-
-model = torch.load("model.pt")
-
-model.eval()
-
-with torch.no_grad():
-    prediction = model(image)
-```
-
-The exact loading and preprocessing procedure depends on the model implementation and released artifact.
-
-## Limitations
-
-The current model has several limitations:
-
-* Segmentation quality is relatively weak.
-* The model has not been extensively tuned.
-* Performance may vary significantly depending on the input images.
-* The model may struggle with small or ambiguous objects.
-* Generalization to datasets different from the training data has not been extensively evaluated.
-* More advanced architectures and training strategies may provide better results.
-
-## Future Work
-
-Possible improvements include:
-
-* Better data augmentation
-* Hyperparameter tuning
-* Improved loss functions
-* Higher-resolution training
-* Transfer learning
-* More extensive validation
-* Class balancing
-* Comparison with modern segmentation architectures
-* Improved post-processing
-
-## Project Structure
-
-The project may contain:
+The trained checkpoints are stored in the `checkpoints/` directory:
 
 ```text
-.
-├── model.py
-├── assets/
-├── README.md
-├── requirements.txt
-└── project.yml
+checkpoints/
+├── unet_resnet34_pts5.pth
+├── unet_resnet34_pts10.pth
+└── unet_resnet34_pts50.pth
 ```
 
-The exact project structure may vary.
-
-## License
-
-See the repository license for usage and distribution information.
-
-## Source
-
-This model is automatically published from the original GitHub project.
-
-The GitHub repository is the source of truth for the model implementation, documentation, and releases.
+Each checkpoint corresponds to a different training configuration used during the assessment.
 
 ---
 
-**Automatically published by `propublisher`.**
+## Project Structure
+
+```text
+.
+├── README.md
+├── project.yml
+├── TahaZeeshan_TechnicalAssesment.pdf
+│
+├── assests/
+│   ├── checkpoint_ious.png
+│   ├── road_segmentation_comparison10pts.png
+│   ├── road_segmentation_comparison50pts.png
+│   └── road_segmentation_comparison5pts.png
+│
+├── checkpoints/
+│   ├── unet_resnet34_pts10.pth
+│   ├── unet_resnet34_pts5.pth
+│   └── unet_resnet34_pts50.pth
+│
+└── code/
+    ├── TECHNICAL_ASSESMENT_GOOGLE_COLLAB.ipynb
+    └── technical_assesment_weakly_segmentation.py
+```
+
+---
+
+## Code
+
+The implementation is available in:
+
+* `code/technical_assesment_weakly_segmentation.py` — main Python implementation
+* `code/TECHNICAL_ASSESMENT_GOOGLE_COLLAB.ipynb` — experimental / assessment notebook
+
+---
+
+## Technical Assessment
+
+The original technical assessment document is included in:
+
+`TahaZeeshan_TechnicalAssesment.pdf`
+
+---
+
+## Reproducibility
+
+The repository contains the source implementation, notebook, trained model checkpoints and visual evaluation results required to inspect the experimental workflow.
+
+---
+
+## Limitations
+
+The results depend on the available supervision, training configuration and evaluation setup. Performance should therefore be interpreted within the context of the experimental assessment rather than as a general benchmark for road segmentation.
+
+---
+
+## Future Work
+
+Potential extensions include:
+
+* Training with larger and more diverse road datasets
+* Stronger supervision and additional segmentation labels
+* Experimenting with alternative encoder architectures
+* Improving boundary and small-region segmentation
+* More extensive quantitative evaluation
+* Testing generalization across different road environments
+
+---
+
+## License
+
+See the repository for licensing information.
