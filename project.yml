@@ -8,3 +8,7 @@ authors:
 publishing:
   kaggle:
     enabled: true
+  huggingface:
+    enabled: true
+    repo_id: tahaz122/weak-segmentation
+    private: false
