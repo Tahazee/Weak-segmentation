@@ -1,2 +1,10 @@
-publish:
-  kaggle_model: true
+name: Weak segmentation using Unet"
+description: "PyTorch implementation of UesNet for image Segmentation."
+
+authors:
+  - name: "Taha Zeeshan"
+    email: "tahazeeshan09@gmail.com"
+
+publishing:
+  kaggle:
+    enabled: true
