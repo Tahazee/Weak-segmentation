@@ -6,11 +6,17 @@ import torch.nn as nn
 from PIL import Image
 import matplotlib.pyplot as plt
 import gradio as gr
+from pathlib import Path
 
-# Ensure local code directory is in python module search path
-root_dir = os.path.dirname(os.path.abspath(__file__))
-code_dir = os.path.join(root_dir, "code")
-sys.path.insert(0, code_dir)
+# Repository root and portable path definitions using pathlib.Path
+BASE_DIR = Path(__file__).resolve().parent
+CODE_DIR = BASE_DIR / "code"
+PREVIEW_IMAGES_DIR = BASE_DIR / "assets" / "preview_images"
+PREVIEW_MASKS_DIR = BASE_DIR / "assets" / "preview_masks"
+WEIGHTS_DIR = BASE_DIR / "weights"
+
+# Ensure local code directory is in sys.path
+sys.path.insert(0, str(CODE_DIR))
 
 from dataset import make_sparse_mask
 from model import build_unet_model
@@ -19,81 +25,33 @@ from metrics import compute_iou
 # Setup device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Global variables for caching loaded models and dataset samples
-MODEL_CACHE = {}
-DATASET_SAMPLES = []
-IMAGE_FOLDER = None
-MASK_FOLDER = None
-
-PRELOADED_SAMPLE_DIR = os.path.join(root_dir, "assets", "samples")
-PRELOADED_MASK_DIR = os.path.join(root_dir, "assets", "samples_masks")
-
+# Model checkpoints map
 CHECKPOINTS = {
-    "5 Points Model": os.path.join(root_dir, "weights", "unet_resnet34_pts5.pth"),
-    "10 Points Model": os.path.join(root_dir, "weights", "unet_resnet34_pts10.pth"),
-    "50 Points Model": os.path.join(root_dir, "weights", "unet_resnet34_pts50.pth"),
+    "5 Points Model": str(WEIGHTS_DIR / "unet_resnet34_pts5.pth"),
+    "10 Points Model": str(WEIGHTS_DIR / "unet_resnet34_pts10.pth"),
+    "50 Points Model": str(WEIGHTS_DIR / "unet_resnet34_pts50.pth"),
 }
 
-
-def find_existing_dataset():
-    """Locates cached dataset files locally if already unzipped, without blocking app startup on large downloads."""
-    global IMAGE_FOLDER, MASK_FOLDER, DATASET_SAMPLES
-    try:
-        cache_dir = os.path.expanduser(
-            os.path.join("~", ".cache", "kagglehub", "datasets", "insaff", "massachusetts-roads-dataset")
-        )
-        if os.path.exists(cache_dir):
-            for root, dirs, files in os.walk(cache_dir):
-                if "road_segmentation_ideal" in dirs or os.path.basename(root) == "training":
-                    input_dir = (
-                        os.path.join(root, "input")
-                        if os.path.basename(root) == "training"
-                        else os.path.join(root, "road_segmentation_ideal", "training", "input")
-                    )
-                    output_dir = (
-                        os.path.join(root, "output")
-                        if os.path.basename(root) == "training"
-                        else os.path.join(root, "road_segmentation_ideal", "training", "output")
-                    )
-                    if os.path.exists(input_dir) and os.path.exists(output_dir):
-                        IMAGE_FOLDER, MASK_FOLDER = input_dir, output_dir
-                        input_files = set(os.listdir(IMAGE_FOLDER))
-                        output_files = set(os.listdir(MASK_FOLDER))
-                        DATASET_SAMPLES = sorted(list(input_files.intersection(output_files)))
-                        print(f"Found cached dataset: {len(DATASET_SAMPLES)} samples in {IMAGE_FOLDER}")
-                        return
-    except Exception as e:
-        print(f"Dataset search info: {e}")
-
-    DATASET_SAMPLES = []
-
-
-# Search dataset on startup
-find_existing_dataset()
+MODEL_CACHE = {}
 
 
 def get_all_gallery_images():
-    """Builds an explicit list of image filepaths to populate the Gradio Gallery UI."""
-    gallery_list = []
+    """
+    Returns a portable list of real Massachusetts dataset preview image filepaths
+    directly from assets/preview_images/.
+    """
+    if not PREVIEW_IMAGES_DIR.exists():
+        return []
 
-    # 1. Append downloaded Massachusetts dataset images from kagglehub first
-    if IMAGE_FOLDER and os.path.exists(IMAGE_FOLDER):
-        for fname in sorted(os.listdir(IMAGE_FOLDER))[:32]:
-            if fname.lower().endswith((".png", ".jpg", ".jpeg")):
-                full_path = os.path.join(IMAGE_FOLDER, fname)
-                gallery_list.append(full_path)
-
-    # 2. Append pre-loaded repository samples
-    if os.path.exists(PRELOADED_SAMPLE_DIR):
-        for fname in sorted(os.listdir(PRELOADED_SAMPLE_DIR)):
-            if fname.lower().endswith((".png", ".jpg", ".jpeg")):
-                full_path = os.path.join(PRELOADED_SAMPLE_DIR, fname)
-                if full_path not in gallery_list:
-                    gallery_list.append(full_path)
-
-    return gallery_list
+    images = sorted(
+        [str(p) for p in PREVIEW_IMAGES_DIR.glob("*.png")]
+        + [str(p) for p in PREVIEW_IMAGES_DIR.glob("*.jpg")]
+        + [str(p) for p in PREVIEW_IMAGES_DIR.glob("*.jpeg")]
+    )
+    return images
 
 
+# Pre-populate gallery items from repository preview folder
 GALLERY_IMAGES = get_all_gallery_images()
 
 
@@ -105,14 +63,14 @@ def get_model(checkpoint_name: str):
     model = build_unet_model(encoder_name="resnet34", device=device)
     ckpt_path = CHECKPOINTS.get(checkpoint_name)
 
-    if ckpt_path and os.path.exists(ckpt_path):
+    if ckpt_path and Path(ckpt_path).exists():
         try:
             model.load_state_dict(torch.load(ckpt_path, map_location=device))
-            print(f"Loaded checkpoint: {ckpt_path}")
+            print(f"Loaded model weights: {ckpt_path}")
         except Exception as e:
-            print(f"Error loading checkpoint {ckpt_path}: {e}")
+            print(f"Error loading model weights {ckpt_path}: {e}")
     else:
-        print(f"Checkpoint path '{ckpt_path}' not found. Using initialized model weights.")
+        print(f"Warning: Checkpoint '{ckpt_path}' not found. Using initialized weights.")
 
     model.eval()
     MODEL_CACHE[checkpoint_name] = model
@@ -149,14 +107,15 @@ def generate_sparse_point_visualization(mask_np, num_points):
     road_coords = np.where(sparse_mask == 1)
     vis_img[road_coords[0], road_coords[1]] = [40, 240, 80]
 
-    # Dilate points for visual clarity using scipy or numpy fallback
+    # Dilate points for visual clarity
     try:
         from scipy.ndimage import binary_dilation
         dilated_vis = np.zeros_like(vis_img)
         for c in range(3):
-            dilated_vis[:, :, c] = (binary_dilation(vis_img[:, :, c] > 0, iterations=2) * vis_img[:, :, c].max()).astype(np.uint8)
+            dilated_vis[:, :, c] = (
+                binary_dilation(vis_img[:, :, c] > 0, iterations=2) * vis_img[:, :, c].max()
+            ).astype(np.uint8)
     except Exception:
-        # Fallback numpy dilation
         radius = 2
         H, W, _ = vis_img.shape
         dilated_vis = np.zeros_like(vis_img)
@@ -185,7 +144,6 @@ def extract_path_from_gallery_selection(evt: gr.SelectData):
 
 def run_segmentation_demo(
     selected_image_path,
-    sample_index,
     custom_image,
     checkpoint_choice,
     num_points,
@@ -194,41 +152,28 @@ def run_segmentation_demo(
     """Segmentation inference and visualization processing pipeline."""
     gt_mask_pil = None
 
-    # Priority 1: Image selected from Gallery
-    if selected_image_path and isinstance(selected_image_path, str) and os.path.exists(selected_image_path):
-        pil_image = Image.open(selected_image_path).convert("RGB").resize((256, 256))
-        filename = os.path.basename(selected_image_path)
+    # Priority 1: Gallery image selection or passed filepath
+    if selected_image_path and isinstance(selected_image_path, str) and Path(selected_image_path).exists():
+        img_path = Path(selected_image_path)
+        pil_image = Image.open(img_path).convert("RGB").resize((256, 256))
+        
+        # Match ground-truth mask from assets/preview_masks/
+        mask_path = PREVIEW_MASKS_DIR / img_path.name
+        if mask_path.exists():
+            gt_mask_pil = Image.open(mask_path).convert("L").resize((256, 256), Image.NEAREST)
 
-        preloaded_mask_path = os.path.join(PRELOADED_MASK_DIR, filename)
-        if os.path.exists(preloaded_mask_path):
-            gt_mask_pil = Image.open(preloaded_mask_path).convert("L").resize((256, 256), Image.NEAREST)
-        elif MASK_FOLDER:
-            dataset_mask_path = os.path.join(MASK_FOLDER, filename)
-            if os.path.exists(dataset_mask_path):
-                gt_mask_pil = Image.open(dataset_mask_path).convert("L").resize((256, 256), Image.NEAREST)
-
-    # Priority 2: Custom image upload
+    # Priority 2: Custom uploaded image
     elif custom_image is not None:
         pil_image = Image.fromarray(custom_image).convert("RGB").resize((256, 256))
 
-    # Priority 3: Dataset index slider selection
-    elif DATASET_SAMPLES and sample_index < len(DATASET_SAMPLES):
-        filename = DATASET_SAMPLES[sample_index]
-        img_path = os.path.join(IMAGE_FOLDER, filename)
-        mask_path = os.path.join(MASK_FOLDER, filename)
+    # Priority 3: Fallback to first preview image in repository
+    elif GALLERY_IMAGES and Path(GALLERY_IMAGES[0]).exists():
+        img_path = Path(GALLERY_IMAGES[0])
         pil_image = Image.open(img_path).convert("RGB").resize((256, 256))
-        gt_mask_pil = Image.open(mask_path).convert("L").resize((256, 256), Image.NEAREST)
-
-    # Priority 4: Fallback to first pre-loaded sample
-    elif GALLERY_IMAGES and os.path.exists(GALLERY_IMAGES[0]):
-        first_path = GALLERY_IMAGES[0]
-        pil_image = Image.open(first_path).convert("RGB").resize((256, 256))
-        filename = os.path.basename(first_path)
-        preloaded_mask_path = os.path.join(PRELOADED_MASK_DIR, filename)
-        if os.path.exists(preloaded_mask_path):
-            gt_mask_pil = Image.open(preloaded_mask_path).convert("L").resize((256, 256), Image.NEAREST)
+        mask_path = PREVIEW_MASKS_DIR / img_path.name
+        if mask_path.exists():
+            gt_mask_pil = Image.open(mask_path).convert("L").resize((256, 256), Image.NEAREST)
     else:
-        # Fallback dummy image
         pil_image = Image.new("RGB", (256, 256), color=(70, 90, 80))
 
     image_np = np.array(pil_image)
@@ -242,7 +187,7 @@ def run_segmentation_demo(
         output = model(img_tensor)
         pred_mask_np = torch.argmax(output, dim=1).squeeze(0).cpu().numpy()
 
-    # Process Masks & Metrics
+    # Process Ground Truth & Sparse Point Mask
     gt_mask_vis = None
     iou_score_str = "N/A (Custom Upload)"
 
@@ -358,16 +303,16 @@ with gr.Blocks(title="Weakly Supervised Road Segmentation Studio") as app:
             with gr.TabItem("Segmentation & Point Supervision Demo"):
                 with gr.Row():
                     with gr.Column(scale=5):
-                        gr.Markdown("### Dataset Sample Gallery")
-                        gr.Markdown("Click on any sample aerial image below to select it for segmentation evaluation:")
+                        gr.Markdown("### Massachusetts Dataset Preview Gallery")
+                        gr.Markdown("Click on any real aerial image sample below to evaluate U-Net segmentation:")
 
                         # Dataset Image Gallery Selector
                         gallery_input = gr.Gallery(
                             value=GALLERY_IMAGES,
-                            label="Dataset Sample Images",
+                            label="Massachusetts Dataset Preview Images",
                             columns=4,
-                            rows=2,
-                            height=260,
+                            rows=3,
+                            height=280,
                             object_fit="cover",
                             allow_preview=False,
                             interactive=True,
@@ -378,16 +323,6 @@ with gr.Blocks(title="Weakly Supervised Road Segmentation Studio") as app:
                         selected_image_state = gr.State(value=GALLERY_IMAGES[0] if GALLERY_IMAGES else None)
 
                         gr.Markdown("### Model Controls & Parameters")
-
-                        max_sample_idx = max(1, len(DATASET_SAMPLES) - 1) if DATASET_SAMPLES else 10
-                        sample_slider = gr.Slider(
-                            minimum=0,
-                            maximum=max_sample_idx,
-                            step=1,
-                            value=0,
-                            label="Or Select Dataset Sample Index",
-                            info=f"Available dataset samples: {len(DATASET_SAMPLES)}",
-                        )
 
                         custom_img_input = gr.Image(
                             type="numpy",
@@ -444,7 +379,6 @@ with gr.Blocks(title="Weakly Supervised Road Segmentation Studio") as app:
 
                 inputs_list = [
                     selected_image_state,
-                    sample_slider,
                     custom_img_input,
                     checkpoint_dropdown,
                     points_slider,
@@ -459,7 +393,6 @@ with gr.Blocks(title="Weakly Supervised Road Segmentation Studio") as app:
                 # Event Handler 2: Gallery Item Clicked
                 def on_gallery_select(
                     evt: gr.SelectData,
-                    sample_index,
                     custom_image,
                     checkpoint_choice,
                     num_points,
@@ -468,7 +401,6 @@ with gr.Blocks(title="Weakly Supervised Road Segmentation Studio") as app:
                     img_path = extract_path_from_gallery_selection(evt)
                     return run_segmentation_demo(
                         img_path,
-                        sample_index,
                         custom_image,
                         checkpoint_choice,
                         num_points,
@@ -478,7 +410,6 @@ with gr.Blocks(title="Weakly Supervised Road Segmentation Studio") as app:
                 gallery_input.select(
                     fn=on_gallery_select,
                     inputs=[
-                        sample_slider,
                         custom_img_input,
                         checkpoint_dropdown,
                         points_slider,
