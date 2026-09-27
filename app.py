@@ -36,7 +36,7 @@ CHECKPOINTS = {
 
 
 def find_existing_dataset():
-    """Locates cached dataset files if available locally."""
+    """Locates cached dataset files locally if already unzipped, without blocking app startup on large downloads."""
     global IMAGE_FOLDER, MASK_FOLDER, DATASET_SAMPLES
     try:
         cache_dir = os.path.expanduser(
@@ -60,7 +60,7 @@ def find_existing_dataset():
                         input_files = set(os.listdir(IMAGE_FOLDER))
                         output_files = set(os.listdir(MASK_FOLDER))
                         DATASET_SAMPLES = sorted(list(input_files.intersection(output_files)))
-                        print(f"Dataset ready: {len(DATASET_SAMPLES)} samples found in {IMAGE_FOLDER}")
+                        print(f"Found cached dataset: {len(DATASET_SAMPLES)} samples in {IMAGE_FOLDER}")
                         return
     except Exception as e:
         print(f"Dataset search info: {e}")
@@ -76,24 +76,24 @@ def get_all_gallery_images():
     """Builds an explicit list of image filepaths to populate the Gradio Gallery UI."""
     gallery_list = []
 
-    # 1. Always include pre-loaded repository samples first
-    if os.path.exists(PRELOADED_SAMPLE_DIR):
-        for fname in sorted(os.listdir(PRELOADED_SAMPLE_DIR)):
-            if fname.lower().endswith((".png", ".jpg", ".jpeg")):
-                full_path = os.path.join(PRELOADED_SAMPLE_DIR, fname)
-                gallery_list.append(full_path)
-
-    # 2. Append Massachusetts dataset sample images if available
+    # 1. Append downloaded Massachusetts dataset images from kagglehub first
     if IMAGE_FOLDER and os.path.exists(IMAGE_FOLDER):
-        for fname in sorted(os.listdir(IMAGE_FOLDER))[:20]:
+        for fname in sorted(os.listdir(IMAGE_FOLDER))[:32]:
             if fname.lower().endswith((".png", ".jpg", ".jpeg")):
                 full_path = os.path.join(IMAGE_FOLDER, fname)
                 gallery_list.append(full_path)
 
+    # 2. Append pre-loaded repository samples
+    if os.path.exists(PRELOADED_SAMPLE_DIR):
+        for fname in sorted(os.listdir(PRELOADED_SAMPLE_DIR)):
+            if fname.lower().endswith((".png", ".jpg", ".jpeg")):
+                full_path = os.path.join(PRELOADED_SAMPLE_DIR, fname)
+                if full_path not in gallery_list:
+                    gallery_list.append(full_path)
+
     return gallery_list
 
 
-# Pre-populate gallery items
 GALLERY_IMAGES = get_all_gallery_images()
 
 
@@ -149,41 +149,42 @@ def generate_sparse_point_visualization(mask_np, num_points):
     road_coords = np.where(sparse_mask == 1)
     vis_img[road_coords[0], road_coords[1]] = [40, 240, 80]
 
-    # Dilate points for visual clarity
-    from scipy.ndimage import binary_dilation
-
-    dilated_vis = np.zeros_like(vis_img)
-    for c in range(3):
-        dilated_vis[:, :, c] = (binary_dilation(vis_img[:, :, c] > 0, iterations=2) * vis_img[:, :, c].max()).astype(
-            np.uint8
-        )
+    # Dilate points for visual clarity using scipy or numpy fallback
+    try:
+        from scipy.ndimage import binary_dilation
+        dilated_vis = np.zeros_like(vis_img)
+        for c in range(3):
+            dilated_vis[:, :, c] = (binary_dilation(vis_img[:, :, c] > 0, iterations=2) * vis_img[:, :, c].max()).astype(np.uint8)
+    except Exception:
+        # Fallback numpy dilation
+        radius = 2
+        H, W, _ = vis_img.shape
+        dilated_vis = np.zeros_like(vis_img)
+        coords = np.where(vis_img > 0)
+        for r, c, ch in zip(coords[0], coords[1], coords[2]):
+            r_min, r_max = max(0, r - radius), min(H, r + radius + 1)
+            c_min, c_max = max(0, c - radius), min(W, c + radius + 1)
+            dilated_vis[r_min:r_max, c_min:c_max, ch] = vis_img[r, c, ch]
 
     return sparse_mask, dilated_vis
 
 
-def extract_filepath_from_gallery_event(evt_data):
-    """Extracts valid image filepath from Gradio select event data."""
-    if evt_data is None:
+def extract_path_from_gallery_selection(evt: gr.SelectData):
+    """Safely extracts image file path from Gradio Gallery SelectData event."""
+    if evt is None or not hasattr(evt, "value"):
         return None
 
-    if isinstance(evt_data, gr.SelectData):
-        val = evt_data.value
-        if isinstance(val, dict):
-            return val.get("image", {}).get("path") or val.get("name") or val.get("path")
-        elif isinstance(val, str):
-            return val
-
-    if isinstance(evt_data, dict):
-        return evt_data.get("image", {}).get("path") or evt_data.get("name") or evt_data.get("path")
-    elif isinstance(evt_data, str):
-        return evt_data
+    val = evt.value
+    if isinstance(val, dict):
+        return val.get("image", {}).get("path") or val.get("name") or val.get("path")
+    elif isinstance(val, str):
+        return val
 
     return None
 
 
 def run_segmentation_demo(
-    evt_data: gr.SelectData,
-    selected_gallery_item,
+    selected_image_path,
     sample_index,
     custom_image,
     checkpoint_choice,
@@ -192,14 +193,12 @@ def run_segmentation_demo(
 ):
     """Segmentation inference and visualization processing pipeline."""
     gt_mask_pil = None
-    selected_path = extract_filepath_from_gallery_event(evt_data)
 
-    # Priority 1: Gallery item selected
-    if selected_path and os.path.exists(selected_path):
-        pil_image = Image.open(selected_path).convert("RGB").resize((256, 256))
-        filename = os.path.basename(selected_path)
+    # Priority 1: Image selected from Gallery
+    if selected_image_path and isinstance(selected_image_path, str) and os.path.exists(selected_image_path):
+        pil_image = Image.open(selected_image_path).convert("RGB").resize((256, 256))
+        filename = os.path.basename(selected_image_path)
 
-        # Check in pre-loaded mask directory first
         preloaded_mask_path = os.path.join(PRELOADED_MASK_DIR, filename)
         if os.path.exists(preloaded_mask_path):
             gt_mask_pil = Image.open(preloaded_mask_path).convert("L").resize((256, 256), Image.NEAREST)
@@ -375,9 +374,12 @@ with gr.Blocks(title="Weakly Supervised Road Segmentation Studio") as app:
                             elem_classes=["gallery-container"],
                         )
 
+                        # Hidden state to store currently selected gallery image path
+                        selected_image_state = gr.State(value=GALLERY_IMAGES[0] if GALLERY_IMAGES else None)
+
                         gr.Markdown("### Model Controls & Parameters")
 
-                        max_sample_idx = max(0, len(DATASET_SAMPLES) - 1) if DATASET_SAMPLES else 10
+                        max_sample_idx = max(1, len(DATASET_SAMPLES) - 1) if DATASET_SAMPLES else 10
                         sample_slider = gr.Slider(
                             minimum=0,
                             maximum=max_sample_idx,
@@ -441,7 +443,7 @@ with gr.Blocks(title="Weakly Supervised Road Segmentation Studio") as app:
                         )
 
                 inputs_list = [
-                    gallery_input,
+                    selected_image_state,
                     sample_slider,
                     custom_img_input,
                     checkpoint_dropdown,
@@ -451,9 +453,39 @@ with gr.Blocks(title="Weakly Supervised Road Segmentation Studio") as app:
 
                 outputs_list = [img_orig, img_gt, img_sparse, img_pred, img_overlay, metrics_df]
 
-                # Event handlers
+                # Event Handler 1: Click Run Button
                 run_btn.click(fn=run_segmentation_demo, inputs=inputs_list, outputs=outputs_list)
-                gallery_input.select(fn=run_segmentation_demo, inputs=inputs_list, outputs=outputs_list)
+
+                # Event Handler 2: Gallery Item Clicked
+                def on_gallery_select(
+                    evt: gr.SelectData,
+                    sample_index,
+                    custom_image,
+                    checkpoint_choice,
+                    num_points,
+                    overlay_opacity,
+                ):
+                    img_path = extract_path_from_gallery_selection(evt)
+                    return run_segmentation_demo(
+                        img_path,
+                        sample_index,
+                        custom_image,
+                        checkpoint_choice,
+                        num_points,
+                        overlay_opacity,
+                    )
+
+                gallery_input.select(
+                    fn=on_gallery_select,
+                    inputs=[
+                        sample_slider,
+                        custom_img_input,
+                        checkpoint_dropdown,
+                        points_slider,
+                        opacity_slider,
+                    ],
+                    outputs=outputs_list,
+                )
 
             # TAB 2: Quantitative Benchmarks & Metrics
             with gr.TabItem("Quantitative Benchmarks & Metrics"):
