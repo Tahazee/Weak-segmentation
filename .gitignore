@@ -2,3 +2,8 @@ checkpoints/
 *.pt
 *.safetensors
 *.pdf
+__pycache__/
+*.pyc
+.demo/
+.gradio/
+.ipynb_checkpoints/
