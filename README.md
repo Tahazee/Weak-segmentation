@@ -59,13 +59,9 @@ WEAKLY SEGMENTATION/
 
 ## Usage Guide
 
-### 1. Interactive Colab / Jupyter Notebook
-Run the notebook located in `code/TECHNICAL_ASSESMENT_GOOGLE_COLLAB.ipynb` in Google Colab or locally via Jupyter:
-```bash
-jupyter notebook code/TECHNICAL_ASSESMENT_GOOGLE_COLLAB.ipynb
-```
 
-### 2. Training a Model
+
+### 1. Training a Model
 Train the U-Net model with weak supervision using `code/train.py`:
 ```bash
 python code/train.py --num-points 10 --epochs 10 --batch-size 8 --lr 0.0001
@@ -75,14 +71,14 @@ python code/train.py --num-points 10 --epochs 10 --batch-size 8 --lr 0.0001
 * `--epochs`: Number of training epochs.
 * `--save-path`: Destination path to save trained weights.
 
-### 3. Evaluating Model Checkpoints
+### 2 Evaluating Model Checkpoints
 Evaluate and compare saved weights in `weights/` using `code/evaluate.py`:
 ```bash
 python code/evaluate.py
 ```
 This script evaluates validation IoU across all checkpoints and generates comparison plots in `assets/`.
 
-### 4. Single Image Inference
+### 3. Single Image Inference
 Run segmentation inference on an aerial input image using `code/infer.py`:
 ```bash
 python code/infer.py --image-path /path/to/aerial_image.png --weights-path weights/unet_resnet34_pts10.pth
