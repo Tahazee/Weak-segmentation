@@ -59,9 +59,20 @@ WEAKLY SEGMENTATION/
 
 ## Usage Guide
 
+### 1. Interactive Gradio Web Application
+Launch the web interface for real-time aerial road segmentation and point supervision simulation:
+```bash
+python app.py
+```
+Then open **[http://127.0.0.1:7860](http://127.0.0.1:7860)** in your web browser.
 
+Features:
+* **Interactive Image Selection:** Pick aerial images from the dataset or upload custom images.
+* **Point Supervision Control:** Select model checkpoints (`5 Points`, `10 Points`, `50 Points`) and adjust point annotation density.
+* **Multi-View Visualizations:** View Input Image, True Ground Truth, Annotated Sparse Points, Predicted Road Mask, and Semi-Transparent Color Overlays.
+* **Quantitative Benchmark Analytics:** View real-time IoU metric scores and comparative performance bar charts.
 
-### 1. Training a Model
+### 2. Training a Model
 Train the U-Net model with weak supervision using `code/train.py`:
 ```bash
 python code/train.py --num-points 10 --epochs 10 --batch-size 8 --lr 0.0001
@@ -71,14 +82,14 @@ python code/train.py --num-points 10 --epochs 10 --batch-size 8 --lr 0.0001
 * `--epochs`: Number of training epochs.
 * `--save-path`: Destination path to save trained weights.
 
-### 2 Evaluating Model Checkpoints
+### 3. Evaluating Model Checkpoints
 Evaluate and compare saved weights in `weights/` using `code/evaluate.py`:
 ```bash
 python code/evaluate.py
 ```
 This script evaluates validation IoU across all checkpoints and generates comparison plots in `assets/`.
 
-### 3. Single Image Inference
+### 4. Single Image Inference
 Run segmentation inference on an aerial input image using `code/infer.py`:
 ```bash
 python code/infer.py --image-path /path/to/aerial_image.png --weights-path weights/unet_resnet34_pts10.pth
